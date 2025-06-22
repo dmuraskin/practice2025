@@ -50,4 +50,52 @@ public:
         grid.resize(height, vector<CellType>(width, EMPTY));
         distances.resize(height, vector<int>(width, -1));
     }
+
+    void generateRandom(int w, int h, double wallProbability = 0.3) {
+        // Сброс состояния
+        width = w;
+        height = h;
+        grid.assign(height, vector<CellType>(width, EMPTY));
+        distances.assign(height, vector<int>(width, -1));
+        waveExecuted = false;
+        operation_count = 0;
+
+        // Генерация случайных стен
+        srand(time(0));
+        for (int y = 0; y < height; ++y) {
+            for (int x = 0; x < width; ++x) {
+                if (rand() / (double)RAND_MAX < wallProbability) {
+                    grid[y][x] = WALL;
+                }
+            }
+        }
+        // Старт в левом верхнем углу
+        start = { 0, 0 };
+        grid[0][0] = START;
+
+        // Финиш в правом нижнем углу
+        end = { width - 1, height - 1 };
+
+        grid[height - 1][width - 1] = END;
+
+        cout << "Случайный лабиринт " << width << "x" << height << " сгенерирован" << endl;
+    }
+
+    void printMaze() const {
+        for (const auto& row : grid) {
+            for (const auto& cell : row) {
+                cout << static_cast<char>(cell) << ' ';
+            }
+            cout << '\n';
+        }
+        cout << endl;
+    }
+    bool isValid(int x, int y) const {
+        return x >= 0 && y >= 0 && x < width && y < height;
+    }
+
+    bool isPassable(int x, int y) const {
+        return isValid(x, y) && grid[y][x] != WALL;
+    }
+
 }
