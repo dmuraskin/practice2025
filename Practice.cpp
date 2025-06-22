@@ -9,6 +9,10 @@
 #include <utility>
 #include <algorithm>
 #include <chrono>
+
+using namespace std;
+using namespace std::chrono;
+
 class Maze {
 public:
     enum CellType {
@@ -98,4 +102,135 @@ public:
         return isValid(x, y) && grid[y][x] != WALL;
     }
 
-}
+    void waveAlgorithm() {
+        resetMetrics();
+        auto start_time = high_resolution_clock::now();
+
+        if (!isPassable(start.first, start.second)) {
+            cerr << "Стартовая позиция непроходима!" << endl;
+            return;
+        }
+        operation_count++;
+
+        for (auto& row : distances) {
+            operation_count += row.size();
+            fill(row.begin(), row.end(), -1);
+        }
+
+        distances[start.second][start.first] = 0;
+        waveExecuted = true;
+        operation_count += 2;
+
+        queue<pair<int, int>> q;
+        q.push(start);
+        operation_count++;
+        //соседи верхний, правый, нижний, левый
+        const int dx[] = { 0, 1, 0, -1 };
+        const int dy[] = { -1, 0, 1, 0 };
+        operation_count += 2;
+
+        while (!q.empty()) {
+            operation_count++;
+            auto current = q.front();
+            q.pop();
+            operation_count += 2;
+
+            for (int i = 0; i < 4; ++i) {
+                operation_count += 2;
+                int nx = current.first + dx[i];
+                int ny = current.second + dy[i];
+                operation_count += 2;
+
+                if (isPassable(nx, ny) && distances[ny][nx] == -1) {
+                    distances[ny][nx] = distances[current.second][current.first] + 1;
+                    q.push({ nx, ny });
+                    operation_count += 3;
+                }
+                operation_count++;
+            }
+        }
+
+        cout << "Волновой алгоритм выполнен" << endl;
+        printMetrics("Волновой алгоритм", start_time);
+    }
+
+    void findPath() {
+        resetMetrics();
+        auto start_time = high_resolution_clock::now();
+
+        if (!waveExecuted) {
+            cerr << "Сначала выполните волновой алгоритм!" << endl;
+            return;
+        }
+        operation_count++;
+
+        if (!isPassable(end.first, end.second) || distances[end.second][end.first] == -1) {
+            cerr << "Путь до конечной позиции не существует!" << endl;
+            return;
+        }
+        operation_count += 2;
+
+        auto originalGrid = grid;
+        vector<pair<int, int>> pathCoordinates;
+        operation_count += 2;
+
+        int x = end.first, y = end.second;
+        operation_count += 2;
+        while (!(x == start.first && y == start.second)) {
+            operation_count++;
+            pathCoordinates.emplace_back(x, y);
+            operation_count++;
+
+            if (grid[y][x] != START && grid[y][x] != END) {
+                grid[y][x] = PATH;
+                operation_count++;
+            }
+
+            const int dx[] = { 0, 1, 0, -1 };
+            const int dy[] = { -1, 0, 1, 0 };
+            operation_count += 2;
+
+            bool found = false;
+            operation_count++;
+            for (int i = 0; i < 4 && !found; ++i) {
+                operation_count += 2;
+                int nx = x + dx[i];
+                int ny = y + dy[i];
+                operation_count += 2;
+
+                if (isValid(nx, ny) && distances[ny][nx] == distances[y][x] - 1) {
+                    x = nx;
+                    y = ny;
+                    found = true;
+                    operation_count += 3;
+                }
+                operation_count++;
+            }
+            if (!found) break;
+            operation_count++;
+        }
+        pathCoordinates.emplace_back(start.first, start.second);
+        operation_count++;
+
+        cout << "Кратчайший путь от S до E:" << endl;
+        printMaze();
+
+        reverse(pathCoordinates.begin(), pathCoordinates.end());
+        operation_count += pathCoordinates.size();
+
+        cout << "Координаты пути (" << pathCoordinates.size() << " шагов):" << endl;
+        for (size_t i = 0; i < pathCoordinates.size(); ++i) {
+            operation_count += 4;
+            auto coord = pathCoordinates[i];
+            cout << i + 1 << ". (" << coord.first << ", " << coord.second << ")";
+            if (i == 0) cout << " - Начало";
+            else if (i == pathCoordinates.size() - 1) cout << " - Конец";
+            cout << endl;
+        }
+
+        grid = originalGrid;
+        operation_count++;
+
+        printMetrics("Поиск пути", start_time);
+    }
+};
