@@ -55,6 +55,76 @@ public:
         distances.resize(height, vector<int>(width, -1));
     }
 
+    void loadFromFile(const string& filename) {
+        resetMetrics();
+        auto start_time = high_resolution_clock::now();
+
+        ifstream file(filename);
+        operation_count++;
+        if (!file) {
+            cerr << "Ошибка открытия файла!" << endl;
+            return;
+        }
+
+        vector<vector<char>> tempGrid;
+        string line;
+        while (getline(file, line)) {
+            operation_count += 2;
+            vector<char> row(line.begin(), line.end());
+            tempGrid.push_back(row);
+        }
+
+        height = tempGrid.size();
+        operation_count++;
+        if (height == 0) {
+            cerr << "Файл пустой!" << endl;
+            return;
+        }
+        width = tempGrid[0].size();
+        operation_count++;
+
+        grid.resize(height, vector<CellType>(width));
+        distances.resize(height, vector<int>(width, -1));
+        operation_count += 2;
+
+        bool startFound = false;
+        bool endFound = false;
+
+        for (int y = 0; y < height; ++y) {
+            for (int x = 0; x < width; ++x) {
+                operation_count += 4;
+                switch (tempGrid[y][x]) {
+                case '#': grid[y][x] = WALL; break;
+                case '.': grid[y][x] = EMPTY; break;
+                case 'S':
+                    grid[y][x] = START;
+                    start = { x, y };
+                    startFound = true;
+                    operation_count += 3;
+                    break;
+                case 'E':
+                    grid[y][x] = END;
+                    end = { x, y };
+                    endFound = true;
+                    operation_count += 3;
+                    break;
+                default:
+                    grid[y][x] = EMPTY;
+                }
+            }
+        }
+
+        if (!startFound) {
+            cerr << "Стартовая точка не найдена! Установите её вручную." << endl;
+        }
+        if (!endFound) {
+            cerr << "Конечная точка не найдена! Установите её вручную." << endl;
+        }
+
+        cout << "Лабиринт загружен из файла " << filename << endl;
+        printMetrics("Загрузка из файла", start_time);
+    }
+
     void generateRandom(int w, int h, double wallProbability = 0.3) {
         // Сброс состояния
         width = w;
@@ -85,15 +155,84 @@ public:
         cout << "Случайный лабиринт " << width << "x" << height << " сгенерирован" << endl;
     }
 
-    void printMaze() const {
-        for (const auto& row : grid) {
-            for (const auto& cell : row) {
-                cout << static_cast<char>(cell) << ' ';
-            }
-            cout << '\n';
+    void setStart(int x, int y) {
+        resetMetrics();
+        auto start_time = high_resolution_clock::now();
+
+        if (!isValid(x, y)) {
+            cerr << "Неверные координаты!" << endl;
+            return;
         }
-        cout << endl;
+        operation_count++;
+
+        if (grid[y][x] == WALL) {
+            cerr << "Нельзя установить старт в стену!" << endl;
+            return;
+        }
+        operation_count++;
+
+        if (grid[y][x] == END) {
+            cerr << "Старт и финиш не могут совпадать!" << endl;
+            return;
+        }
+        operation_count++;
+
+        if (isValid(start.first, start.second)) {
+            if (grid[start.second][start.first] == START) {
+                grid[start.second][start.first] = EMPTY;
+                operation_count += 2;
+            }
+        }
+        operation_count++;
+
+        start = { x, y };
+        grid[y][x] = START;
+        waveExecuted = false;
+        operation_count += 3;
+
+        cout << "Старт установлен в (" << x << ", " << y << ")" << endl;
+        printMetrics("Установка стартовой точки", start_time);
     }
+
+    void setEnd(int x, int y) {
+        resetMetrics();
+        auto start_time = high_resolution_clock::now();
+
+        if (!isValid(x, y)) {
+            cerr << "Неверные координаты!" << endl;
+            return;
+        }
+        operation_count++;
+
+        if (grid[y][x] == WALL) {
+            cerr << "Нельзя установить финиш в стену!" << endl;
+            return;
+        }
+        operation_count++;
+
+        if (grid[y][x] == START) {
+            cerr << "Старт и финиш не могут совпадать!" << endl;
+            return;
+        }
+        operation_count++;
+
+        if (isValid(end.first, end.second)) {
+            if (grid[end.second][end.first] == END) {
+                grid[end.second][end.first] = EMPTY;
+                operation_count += 2;
+            }
+        }
+        operation_count++;
+
+        end = { x, y };
+        grid[y][x] = END;
+        waveExecuted = false;
+        operation_count += 3;
+
+        cout << "Финиш установлен в (" << x << ", " << y << ")" << endl;
+        printMetrics("Установка конечной точки", start_time);
+    }
+
     bool isValid(int x, int y) const {
         return x >= 0 && y >= 0 && x < width && y < height;
     }
@@ -232,5 +371,65 @@ public:
         operation_count++;
 
         printMetrics("Поиск пути", start_time);
+    }
+
+    void printMaze() const {
+        for (const auto& row : grid) {
+            for (const auto& cell : row) {
+                cout << static_cast<char>(cell) << ' ';
+            }
+            cout << '\n';
+        }
+        cout << endl;
+    }
+
+    void saveToFile(const string& filename) {
+        resetMetrics();
+        auto start_time = high_resolution_clock::now();
+
+        ofstream file(filename);
+        operation_count++;
+        if (!file) {
+            cerr << "Ошибка создания файла!" << endl;
+            return;
+        }
+
+        for (const auto& row : grid) {
+            for (const auto& cell : row) {
+                operation_count++;
+                file << static_cast<char>(cell);
+            }
+            file << '\n';
+            operation_count++;
+        }
+
+        cout << "Лабиринт сохранен в файл " << filename << endl;
+        printMetrics("Сохранение в файл", start_time);
+    }
+
+    void editCell(int x, int y, CellType type) {
+        resetMetrics();
+        auto start_time = high_resolution_clock::now();
+
+        if (!isValid(x, y)) {
+            cerr << "Неверные координаты!" << endl;
+            return;
+        }
+        operation_count++;
+
+        if (type == START) {
+            setStart(x, y);
+        }
+        else if (type == END) {
+            setEnd(x, y);
+        }
+        else {
+            grid[y][x] = type;
+            waveExecuted = false;
+            operation_count += 2;
+        }
+        operation_count++;
+
+        printMetrics("Редактирование клетки", start_time);
     }
 };
