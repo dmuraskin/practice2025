@@ -433,3 +433,95 @@ public:
         printMetrics("Редактирование клетки", start_time);
     }
 };
+
+void showMenu() {
+    cout << "\n=== Меню управления лабиринтом ===" << endl;
+    cout << "1. Загрузить лабиринт из файла" << endl;
+    cout << "2. Сгенерировать случайный лабиринт" << endl;
+    cout << "3. Установить стартовую точку" << endl;
+    cout << "4. Установить конечную точку" << endl;
+    cout << "5. Редактировать клетку" << endl;
+    cout << "6. Выполнить волновой алгоритм" << endl;
+    cout << "7. Найти и показать путь" << endl;
+    cout << "8. Сохранить лабиринт в файл" << endl;
+    cout << "9. Показать лабиринт" << endl;
+    cout << "0. Выход" << endl;
+    cout << "Выберите действие: ";
+}
+
+int main() {
+    setlocale(LC_ALL, "RUS");
+    Maze maze(5, 5);
+    int choice;
+    string filename;
+    int x, y;
+
+    while (true) {
+        showMenu();
+        cin >> choice;
+
+        if (cin.fail()) {
+            cin.clear();
+            cin.ignore(numeric_limits<streamsize>::max(), '\n');
+            cout << "Некорректный ввод! Пожалуйста, введите число." << endl;
+            continue;
+        }
+
+        switch (choice) {
+        case 1:
+            cout << "Введите имя файла: ";
+            cin >> filename;
+            maze.loadFromFile(filename);
+            break;
+        case 2:
+            cout << "Введите ширину и высоту лабиринта: ";
+            cin >> x >> y;
+            if (x <= 0 || y <= 0) {
+                cout << "Размеры должны быть положительными!" << endl;
+                break;
+            }
+            maze.generateRandom(x, y);
+            break;
+        case 3:
+            cout << "Введите координаты (x y) для старта: ";
+            cin >> x >> y;
+            maze.setStart(x, y);
+            break;
+        case 4:
+            cout << "Введите координаты (x y) для финиша: ";
+            cin >> x >> y;
+            maze.setEnd(x, y);
+            break;
+        case 5:
+            cout << "Введите координаты (x y) и тип клетки (0-стена, 1-путь): ";
+            cin >> x >> y >> choice;
+            if (choice < 0 || choice > 1) {
+                cout << "Некорректный тип клетки!" << endl;
+                break;
+            }
+            maze.editCell(x, y, choice == 0 ? Maze::WALL : Maze::EMPTY);
+            break;
+        case 6:
+            maze.waveAlgorithm();
+            break;
+        case 7:
+            maze.findPath();
+            break;
+        case 8:
+            cout << "Введите имя файла для сохранения: ";
+            cin >> filename;
+            maze.saveToFile(filename);
+            break;
+        case 9:
+            maze.printMaze();
+            break;
+        case 0:
+            cout << "Выход из программы..." << endl;
+            return 0;
+        default:
+            cout << "Неизвестная команда!" << endl;
+        }
+    }
+
+    return 0;
+}
