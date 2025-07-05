@@ -9,31 +9,32 @@
 #include <utility>
 #include <algorithm>
 #include <chrono>
+#include <sstream>
 
 using namespace std;
 using namespace std::chrono;
 
 class Maze {
 public:
-    enum CellType {
-        WALL = '#',
-        EMPTY = '.',
-        PATH = '*',
-        START = 'S',
-        END = 'E'
+    enum CellState {
+        EMPTY,
+        START,
+        END,
+        PATH
     };
 
 private:
     int width;
     int height;
-    vector<vector<CellType>> grid;
-    vector<vector<int>> distances;
+    vector<vector<CellState>> cells;
+    vector<vector<bool>> horizWalls; // Горизонтальные стены между строками [height-1][width]
+    vector<vector<bool>> vertWalls;  // Вертикальные стены между столбцами [height][width-1]
     pair<int, int> start;
     pair<int, int> end;
+    vector<vector<int>> distances;
     bool waveExecuted;
     size_t operation_count;
 
-    // Вспомогательные методы для замера производительности
     void resetMetrics() {
         operation_count = 0;
     }
@@ -49,10 +50,45 @@ private:
         cout << "===============================" << endl << endl;
     }
 
+    bool isValid(int x, int y) const {
+        return x >= 0 && y >= 0 && x < width && y < height;
+    }
+
+    bool canMove(int x1, int y1, int x2, int y2) const {
+        if (!isValid(x2, y2)) return false;
+
+        if (x1 == x2) { // Движение по вертикали
+            int minY = min(y1, y2);
+            if (minY < 0 || minY >= horizWalls.size()) return false;
+            return !horizWalls[minY][x1];
+        }
+        else if (y1 == y2) { // Движение по горизонтали
+            int minX = min(x1, x2);
+            if (minX < 0 || minX >= vertWalls[0].size()) return false;
+            return !vertWalls[y1][minX];
+        }
+        return false;
+    }
+
+    char getCellChar(int x, int y) const {
+        switch (cells[y][x]) {
+        case START: return 'S';
+        case END: return 'E';
+        case PATH: return '*';
+        default: return ' ';
+        }
+    }
+
 public:
     Maze(int w, int h) : width(w), height(h), waveExecuted(false), operation_count(0) {
-        grid.resize(height, vector<CellType>(width, EMPTY));
-        distances.resize(height, vector<int>(width, -1));
+        cells.assign(height, vector<CellState>(width, EMPTY));
+        horizWalls.assign(height - 1, vector<bool>(width, false));
+        vertWalls.assign(height, vector<bool>(width - 1, false));
+        distances.assign(height, vector<int>(width, -1));
+
+        // Установка старта и финиша по умолчанию
+        setStart(0, 0);
+        setEnd(width - 1, height - 1);
     }
 
     void loadFromFile(const string& filename) {
@@ -66,93 +102,91 @@ public:
             return;
         }
 
-        vector<vector<char>> tempGrid;
         string line;
-        while (getline(file, line)) {
-            operation_count += 2;
-            vector<char> row(line.begin(), line.end());
-            tempGrid.push_back(row);
-        }
+        // Чтение размеров
+        getline(file, line);
+        width = stoi(line);
+        getline(file, line);
+        height = stoi(line);
 
-        height = tempGrid.size();
-        operation_count++;
-        if (height == 0) {
-            cerr << "Файл пустой!" << endl;
-            return;
-        }
-        width = tempGrid[0].size();
-        operation_count++;
+        cells.assign(height, vector<CellState>(width, EMPTY));
+        horizWalls.assign(height - 1, vector<bool>(width, false));
+        vertWalls.assign(height, vector<bool>(width - 1, false));
+        distances.assign(height, vector<int>(width, -1));
 
-        grid.resize(height, vector<CellType>(width));
-        distances.resize(height, vector<int>(width, -1));
-        operation_count += 2;
-
-        bool startFound = false;
-        bool endFound = false;
-
-        for (int y = 0; y < height; ++y) {
+        // Чтение горизонтальных стен
+        for (int y = 0; y < height - 1; ++y) {
+            getline(file, line);
             for (int x = 0; x < width; ++x) {
-                operation_count += 4;
-                switch (tempGrid[y][x]) {
-                case '#': grid[y][x] = WALL; break;
-                case '.': grid[y][x] = EMPTY; break;
-                case 'S':
-                    grid[y][x] = START;
-                    start = { x, y };
-                    startFound = true;
-                    operation_count += 3;
-                    break;
-                case 'E':
-                    grid[y][x] = END;
-                    end = { x, y };
-                    endFound = true;
-                    operation_count += 3;
-                    break;
-                default:
-                    grid[y][x] = EMPTY;
-                }
+                horizWalls[y][x] = (line[x] == '1');
+                operation_count++;
             }
         }
 
-        if (!startFound) {
-            cerr << "Стартовая точка не найдена! Установите её вручную." << endl;
-        }
-        if (!endFound) {
-            cerr << "Конечная точка не найдена! Установите её вручную." << endl;
+        // Чтение вертикальных стен
+        for (int y = 0; y < height; ++y) {
+            getline(file, line);
+            for (int x = 0; x < width - 1; ++x) {
+                vertWalls[y][x] = (line[x] == '1');
+                operation_count++;
+            }
         }
 
+        // Чтение стартовой позиции
+        getline(file, line);
+        istringstream iss_start(line);
+        iss_start >> start.first >> start.second;
+        cells[start.second][start.first] = START;
+        operation_count += 2;
+
+        // Чтение конечной позиции
+        getline(file, line);
+        istringstream iss_end(line);
+        iss_end >> end.first >> end.second;
+        cells[end.second][end.first] = END;
+        operation_count += 2;
+
+        waveExecuted = false;
         cout << "Лабиринт загружен из файла " << filename << endl;
         printMetrics("Загрузка из файла", start_time);
     }
 
     void generateRandom(int w, int h, double wallProbability = 0.3) {
-        // Сброс состояния
+        resetMetrics();
+        auto start_time = high_resolution_clock::now();
+
         width = w;
         height = h;
-        grid.assign(height, vector<CellType>(width, EMPTY));
+        cells.assign(height, vector<CellState>(width, EMPTY));
+        horizWalls.assign(height - 1, vector<bool>(width, false));
+        vertWalls.assign(height, vector<bool>(width - 1, false));
         distances.assign(height, vector<int>(width, -1));
         waveExecuted = false;
-        operation_count = 0;
 
-        // Генерация случайных стен
         srand(time(0));
-        for (int y = 0; y < height; ++y) {
+
+        // Генерация горизонтальных стен
+        for (int y = 0; y < height - 1; ++y) {
             for (int x = 0; x < width; ++x) {
-                if (rand() / (double)RAND_MAX < wallProbability) {
-                    grid[y][x] = WALL;
-                }
+                horizWalls[y][x] = (rand() / (double)RAND_MAX) < wallProbability;
+                operation_count += 2;
             }
         }
-        // Старт в левом верхнем углу
-        start = { 0, 0 };
-        grid[0][0] = START;
 
-        // Финиш в правом нижнем углу
-        end = { width - 1, height - 1 };
+        // Генерация вертикальных стен
+        for (int y = 0; y < height; ++y) {
+            for (int x = 0; x < width - 1; ++x) {
+                vertWalls[y][x] = (rand() / (double)RAND_MAX) < wallProbability;
+                operation_count += 2;
+            }
+        }
 
-        grid[height - 1][width - 1] = END;
+        // Установка старта и финиша
+        setStart(0, 0);
+        setEnd(width - 1, height - 1);
 
         cout << "Случайный лабиринт " << width << "x" << height << " сгенерирован" << endl;
+        printMetrics("Генерация лабиринта", start_time);
     }
 
     void setStart(int x, int y) {
@@ -165,28 +199,14 @@ public:
         }
         operation_count++;
 
-        if (grid[y][x] == WALL) {
-            cerr << "Нельзя установить старт в стену!" << endl;
-            return;
-        }
-        operation_count++;
-
-        if (grid[y][x] == END) {
-            cerr << "Старт и финиш не могут совпадать!" << endl;
-            return;
-        }
-        operation_count++;
-
+        // Сбрасываем предыдущий старт
         if (isValid(start.first, start.second)) {
-            if (grid[start.second][start.first] == START) {
-                grid[start.second][start.first] = EMPTY;
-                operation_count += 2;
-            }
+            cells[start.second][start.first] = EMPTY;
+            operation_count++;
         }
-        operation_count++;
 
         start = { x, y };
-        grid[y][x] = START;
+        cells[y][x] = START;
         waveExecuted = false;
         operation_count += 3;
 
@@ -204,28 +224,14 @@ public:
         }
         operation_count++;
 
-        if (grid[y][x] == WALL) {
-            cerr << "Нельзя установить финиш в стену!" << endl;
-            return;
-        }
-        operation_count++;
-
-        if (grid[y][x] == START) {
-            cerr << "Старт и финиш не могут совпадать!" << endl;
-            return;
-        }
-        operation_count++;
-
+        // Сбрасываем предыдущий финиш
         if (isValid(end.first, end.second)) {
-            if (grid[end.second][end.first] == END) {
-                grid[end.second][end.first] = EMPTY;
-                operation_count += 2;
-            }
+            cells[end.second][end.first] = EMPTY;
+            operation_count++;
         }
-        operation_count++;
 
         end = { x, y };
-        grid[y][x] = END;
+        cells[y][x] = END;
         waveExecuted = false;
         operation_count += 3;
 
@@ -233,29 +239,17 @@ public:
         printMetrics("Установка конечной точки", start_time);
     }
 
-    bool isValid(int x, int y) const {
-        return x >= 0 && y >= 0 && x < width && y < height;
-    }
-
-    bool isPassable(int x, int y) const {
-        return isValid(x, y) && grid[y][x] != WALL;
-    }
-
     void waveAlgorithm() {
         resetMetrics();
         auto start_time = high_resolution_clock::now();
 
-        if (!isPassable(start.first, start.second)) {
-            cerr << "Стартовая позиция непроходима!" << endl;
+        if (!isValid(start.first, start.second)) {
+            cerr << "Стартовая позиция недействительна!" << endl;
             return;
         }
         operation_count++;
 
-        for (auto& row : distances) {
-            operation_count += row.size();
-            fill(row.begin(), row.end(), -1);
-        }
-
+        distances.assign(height, vector<int>(width, -1));
         distances[start.second][start.first] = 0;
         waveExecuted = true;
         operation_count += 2;
@@ -263,7 +257,7 @@ public:
         queue<pair<int, int>> q;
         q.push(start);
         operation_count++;
-        //соседи верхний, правый, нижний, левый
+
         const int dx[] = { 0, 1, 0, -1 };
         const int dy[] = { -1, 0, 1, 0 };
         operation_count += 2;
@@ -280,7 +274,8 @@ public:
                 int ny = current.second + dy[i];
                 operation_count += 2;
 
-                if (isPassable(nx, ny) && distances[ny][nx] == -1) {
+                if (canMove(current.first, current.second, nx, ny) &&
+                    distances[ny][nx] == -1) {
                     distances[ny][nx] = distances[current.second][current.first] + 1;
                     q.push({ nx, ny });
                     operation_count += 3;
@@ -303,28 +298,23 @@ public:
         }
         operation_count++;
 
-        if (!isPassable(end.first, end.second) || distances[end.second][end.first] == -1) {
+        if (distances[end.second][end.first] == -1) {
             cerr << "Путь до конечной позиции не существует!" << endl;
             return;
         }
-        operation_count += 2;
+        operation_count++;
 
-        auto originalGrid = grid;
+        // Сохраняем оригинальное состояние
+        auto originalCells = cells;
         vector<pair<int, int>> pathCoordinates;
         operation_count += 2;
 
         int x = end.first, y = end.second;
-        operation_count += 2;
+        pathCoordinates.emplace_back(x, y);
+        operation_count += 3;
+
         while (!(x == start.first && y == start.second)) {
             operation_count++;
-            pathCoordinates.emplace_back(x, y);
-            operation_count++;
-
-            if (grid[y][x] != START && grid[y][x] != END) {
-                grid[y][x] = PATH;
-                operation_count++;
-            }
-
             const int dx[] = { 0, 1, 0, -1 };
             const int dy[] = { -1, 0, 1, 0 };
             operation_count += 2;
@@ -337,19 +327,27 @@ public:
                 int ny = y + dy[i];
                 operation_count += 2;
 
-                if (isValid(nx, ny) && distances[ny][nx] == distances[y][x] - 1) {
+                if (isValid(nx, ny) &&
+                    distances[ny][nx] == distances[y][x] - 1 &&
+                    canMove(x, y, nx, ny)) {
                     x = nx;
                     y = ny;
                     found = true;
-                    operation_count += 3;
+                    pathCoordinates.emplace_back(x, y);
+                    if (cells[y][x] == EMPTY) {
+                        cells[y][x] = PATH;
+                    }
+                    operation_count += 5;
                 }
                 operation_count++;
             }
-            if (!found) break;
+
+            if (!found) {
+                cerr << "Ошибка восстановления пути!" << endl;
+                break;
+            }
             operation_count++;
         }
-        pathCoordinates.emplace_back(start.first, start.second);
-        operation_count++;
 
         cout << "Кратчайший путь от S до E:" << endl;
         printMaze();
@@ -367,20 +365,47 @@ public:
             cout << endl;
         }
 
-        grid = originalGrid;
+        // Восстанавливаем оригинальное состояние
+        cells = originalCells;
         operation_count++;
 
         printMetrics("Поиск пути", start_time);
     }
 
     void printMaze() const {
-        for (const auto& row : grid) {
-            for (const auto& cell : row) {
-                cout << static_cast<char>(cell) << ' ';
-            }
-            cout << '\n';
+        // Верхняя граница
+        for (int x = 0; x < width; ++x) {
+            cout << "+---";
         }
-        cout << endl;
+        cout << "+\n";
+
+        for (int y = 0; y < height; ++y) {
+            // Вертикальные стены и клетки
+            cout << "|";
+            for (int x = 0; x < width; ++x) {
+                cout << " " << getCellChar(x, y) << " ";
+                if (x < width - 1) {
+                    cout << (vertWalls[y][x] ? "|" : " ");
+                }
+            }
+            cout << "|\n";
+
+            // Горизонтальные стены
+            if (y < height - 1) {
+                cout << "+";
+                for (int x = 0; x < width; ++x) {
+                    cout << (horizWalls[y][x] ? "---" : "   ");
+                    cout << "+";
+                }
+                cout << "\n";
+            }
+        }
+
+        // Нижняя граница
+        for (int x = 0; x < width; ++x) {
+            cout << "+---";
+        }
+        cout << "+\n";
     }
 
     void saveToFile(const string& filename) {
@@ -394,43 +419,143 @@ public:
             return;
         }
 
-        for (const auto& row : grid) {
-            for (const auto& cell : row) {
+        // Запись размеров
+        file << width << endl << height << endl;
+
+        // Запись горизонтальных стен
+        for (int y = 0; y < height - 1; ++y) {
+            for (int x = 0; x < width; ++x) {
+                file << (horizWalls[y][x] ? '1' : '0');
                 operation_count++;
-                file << static_cast<char>(cell);
             }
-            file << '\n';
-            operation_count++;
+            file << endl;
         }
+
+        // Запись вертикальных стен
+        for (int y = 0; y < height; ++y) {
+            for (int x = 0; x < width - 1; ++x) {
+                file << (vertWalls[y][x] ? '1' : '0');
+                operation_count++;
+            }
+            file << endl;
+        }
+
+        // Запись стартовой и конечной позиций
+        file << start.first << " " << start.second << endl;
+        file << end.first << " " << end.second << endl;
+        operation_count += 2;
 
         cout << "Лабиринт сохранен в файл " << filename << endl;
         printMetrics("Сохранение в файл", start_time);
     }
 
-    void editCell(int x, int y, CellType type) {
+    void editWall(int x, int y, char direction, bool isWall) {
         resetMetrics();
         auto start_time = high_resolution_clock::now();
 
-        if (!isValid(x, y)) {
-            cerr << "Неверные координаты!" << endl;
-            return;
+        bool success = false;
+        switch (tolower(direction)) {
+        case 'n': // север (верх)
+            if (y > 0) {
+                horizWalls[y - 1][x] = isWall;
+                success = true;
+            }
+            break;
+        case 's': // юг (низ)
+            if (y < height - 1) {
+                horizWalls[y][x] = isWall;
+                success = true;
+            }
+            break;
+        case 'w': // запад (лево)
+            if (x > 0) {
+                vertWalls[y][x - 1] = isWall;
+                success = true;
+            }
+            break;
+        case 'e': // восток (право)
+            if (x < width - 1) {
+                vertWalls[y][x] = isWall;
+                success = true;
+            }
+            break;
         }
-        operation_count++;
 
-        if (type == START) {
-            setStart(x, y);
-        }
-        else if (type == END) {
-            setEnd(x, y);
+        if (success) {
+            waveExecuted = false;
+            cout << "Стена изменена успешно" << endl;
         }
         else {
-            grid[y][x] = type;
-            waveExecuted = false;
-            operation_count += 2;
+            cerr << "Неверные координаты или направление!" << endl;
         }
-        operation_count++;
 
-        printMetrics("Редактирование клетки", start_time);
+        printMetrics("Редактирование стены", start_time);
+    }
+
+    void generateRandomWithPath(int w, int h) {
+        resetMetrics();
+        auto start_time = high_resolution_clock::now();
+
+        width = w;
+        height = h;
+        cells.assign(height, vector<CellState>(width, EMPTY));
+        horizWalls.assign(height - 1, vector<bool>(width, true));
+        vertWalls.assign(height, vector<bool>(width - 1, true));
+        distances.assign(height, vector<int>(width, -1));
+
+        // Алгоритм Prim для генерации лабиринта с гарантированным путем
+        vector<vector<bool>> visited(height, vector<bool>(width, false));
+        priority_queue<pair<int, pair<int, int>>> walls;
+
+        // Начинаем со случайной клетки
+        int x = rand() % width;
+        int y = rand() % height;
+        visited[y][x] = true;
+
+        // Добавляем соседние стены
+        if (x > 0) walls.push({ rand(), {x - 1, y} });
+        if (x < width - 1) walls.push({ rand(), {x + 1, y} });
+        if (y > 0) walls.push({ rand(), {x, y - 1} });
+        if (y < height - 1) walls.push({ rand(), {x, y + 1} });
+
+        while (!walls.empty()) {
+            auto wall = walls.top().second;
+            walls.pop();
+            x = wall.first;
+            y = wall.second;
+
+            vector<pair<int, int>> unvisited;
+            if (x > 0 && !visited[y][x - 1]) unvisited.emplace_back(x - 1, y);
+            if (x < width - 1 && !visited[y][x + 1]) unvisited.emplace_back(x + 1, y);
+            if (y > 0 && !visited[y - 1][x]) unvisited.emplace_back(x, y - 1);
+            if (y < height - 1 && !visited[y + 1][x]) unvisited.emplace_back(x, y + 1);
+
+            if (!unvisited.empty()) {
+                auto cell = unvisited[rand() % unvisited.size()];
+                visited[cell.second][cell.first] = true;
+
+                // Убираем стену
+                if (cell.first == x - 1) vertWalls[y][x - 1] = false;
+                else if (cell.first == x + 1) vertWalls[y][x] = false;
+                else if (cell.second == y - 1) horizWalls[y - 1][x] = false;
+                else if (cell.second == y + 1) horizWalls[y][x] = false;
+
+                // Добавляем новые стены
+                if (cell.first > 0 && !visited[cell.second][cell.first - 1])
+                    walls.push({ rand(), {cell.first - 1, cell.second} });
+                if (cell.first < width - 1 && !visited[cell.second][cell.first + 1])
+                    walls.push({ rand(), {cell.first + 1, cell.second} });
+                if (cell.second > 0 && !visited[cell.second - 1][cell.first])
+                    walls.push({ rand(), {cell.first, cell.second - 1} });
+                if (cell.second < height - 1 && !visited[cell.second + 1][cell.first])
+                    walls.push({ rand(), {cell.first, cell.second + 1} });
+            }
+        }
+
+        setStart(0, 0);
+        setEnd(width - 1, height - 1);
+        cout << "Лабиринт с гарантированным путем сгенерирован" << endl;
+        printMetrics("Генерация лабиринта с путем", start_time);
     }
 };
 
@@ -438,23 +563,27 @@ void showMenu() {
     cout << "\n=== Меню управления лабиринтом ===" << endl;
     cout << "1. Загрузить лабиринт из файла" << endl;
     cout << "2. Сгенерировать случайный лабиринт" << endl;
-    cout << "3. Установить стартовую точку" << endl;
-    cout << "4. Установить конечную точку" << endl;
-    cout << "5. Редактировать клетку" << endl;
-    cout << "6. Выполнить волновой алгоритм" << endl;
-    cout << "7. Найти и показать путь" << endl;
-    cout << "8. Сохранить лабиринт в файл" << endl;
-    cout << "9. Показать лабиринт" << endl;
+    cout << "3. Сгенерировать лабиринт с гарантированным путем" << endl;
+    cout << "4. Установить стартовую точку" << endl;
+    cout << "5. Установить конечную точку" << endl;
+    cout << "6. Редактировать стену" << endl;
+    cout << "7. Выполнить волновой алгоритм" << endl;
+    cout << "8. Найти и показать путь" << endl;
+    cout << "9. Сохранить лабиринт в файл" << endl;
+    cout << "10. Показать лабиринт" << endl;
     cout << "0. Выход" << endl;
     cout << "Выберите действие: ";
 }
 
 int main() {
     setlocale(LC_ALL, "RUS");
+    srand(time(0));
     Maze maze(5, 5);
     int choice;
     string filename;
     int x, y;
+    char dir;
+    int wallAction;
 
     while (true) {
         showMenu();
@@ -483,36 +612,41 @@ int main() {
             maze.generateRandom(x, y);
             break;
         case 3:
+            cout << "Введите ширину и высоту лабиринта: ";
+            cin >> x >> y;
+            if (x <= 0 || y <= 0) {
+                cout << "Размеры должны быть положительными!" << endl;
+                break;
+            }
+            maze.generateRandomWithPath(x, y);
+            break;
+        case 4:
             cout << "Введите координаты (x y) для старта: ";
             cin >> x >> y;
             maze.setStart(x, y);
             break;
-        case 4:
+        case 5:
             cout << "Введите координаты (x y) для финиша: ";
             cin >> x >> y;
             maze.setEnd(x, y);
             break;
-        case 5:
-            cout << "Введите координаты (x y) и тип клетки (0-стена, 1-путь): ";
-            cin >> x >> y >> choice;
-            if (choice < 0 || choice > 1) {
-                cout << "Некорректный тип клетки!" << endl;
-                break;
-            }
-            maze.editCell(x, y, choice == 0 ? Maze::WALL : Maze::EMPTY);
-            break;
         case 6:
-            maze.waveAlgorithm();
+            cout << "Введите координаты (x y), направление (N/S/W/E) и действие (0-удалить, 1-добавить): ";
+            cin >> x >> y >> dir >> wallAction;
+            maze.editWall(x, y, dir, wallAction == 1);
             break;
         case 7:
-            maze.findPath();
+            maze.waveAlgorithm();
             break;
         case 8:
+            maze.findPath();
+            break;
+        case 9:
             cout << "Введите имя файла для сохранения: ";
             cin >> filename;
             maze.saveToFile(filename);
             break;
-        case 9:
+        case 10:
             maze.printMaze();
             break;
         case 0:
