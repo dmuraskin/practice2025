@@ -210,8 +210,6 @@ public:
         waveExecuted = false;
         operation_count += 3;
 
-        cout << "Старт установлен в (" << x << ", " << y << ")" << endl;
-        printMetrics("Установка стартовой точки", start_time);
     }
 
     void setEnd(int x, int y) {
@@ -235,8 +233,6 @@ public:
         waveExecuted = false;
         operation_count += 3;
 
-        cout << "Финиш установлен в (" << x << ", " << y << ")" << endl;
-        printMetrics("Установка конечной точки", start_time);
     }
 
     void waveAlgorithm() {
@@ -491,86 +487,19 @@ public:
 
         printMetrics("Редактирование стены", start_time);
     }
-
-    void generateRandomWithPath(int w, int h) {
-        resetMetrics();
-        auto start_time = high_resolution_clock::now();
-
-        width = w;
-        height = h;
-        cells.assign(height, vector<CellState>(width, EMPTY));
-        horizWalls.assign(height - 1, vector<bool>(width, true));
-        vertWalls.assign(height, vector<bool>(width - 1, true));
-        distances.assign(height, vector<int>(width, -1));
-
-        // Алгоритм Prim для генерации лабиринта с гарантированным путем
-        vector<vector<bool>> visited(height, vector<bool>(width, false));
-        priority_queue<pair<int, pair<int, int>>> walls;
-
-        // Начинаем со случайной клетки
-        int x = rand() % width;
-        int y = rand() % height;
-        visited[y][x] = true;
-
-        // Добавляем соседние стены
-        if (x > 0) walls.push({ rand(), {x - 1, y} });
-        if (x < width - 1) walls.push({ rand(), {x + 1, y} });
-        if (y > 0) walls.push({ rand(), {x, y - 1} });
-        if (y < height - 1) walls.push({ rand(), {x, y + 1} });
-
-        while (!walls.empty()) {
-            auto wall = walls.top().second;
-            walls.pop();
-            x = wall.first;
-            y = wall.second;
-
-            vector<pair<int, int>> unvisited;
-            if (x > 0 && !visited[y][x - 1]) unvisited.emplace_back(x - 1, y);
-            if (x < width - 1 && !visited[y][x + 1]) unvisited.emplace_back(x + 1, y);
-            if (y > 0 && !visited[y - 1][x]) unvisited.emplace_back(x, y - 1);
-            if (y < height - 1 && !visited[y + 1][x]) unvisited.emplace_back(x, y + 1);
-
-            if (!unvisited.empty()) {
-                auto cell = unvisited[rand() % unvisited.size()];
-                visited[cell.second][cell.first] = true;
-
-                // Убираем стену
-                if (cell.first == x - 1) vertWalls[y][x - 1] = false;
-                else if (cell.first == x + 1) vertWalls[y][x] = false;
-                else if (cell.second == y - 1) horizWalls[y - 1][x] = false;
-                else if (cell.second == y + 1) horizWalls[y][x] = false;
-
-                // Добавляем новые стены
-                if (cell.first > 0 && !visited[cell.second][cell.first - 1])
-                    walls.push({ rand(), {cell.first - 1, cell.second} });
-                if (cell.first < width - 1 && !visited[cell.second][cell.first + 1])
-                    walls.push({ rand(), {cell.first + 1, cell.second} });
-                if (cell.second > 0 && !visited[cell.second - 1][cell.first])
-                    walls.push({ rand(), {cell.first, cell.second - 1} });
-                if (cell.second < height - 1 && !visited[cell.second + 1][cell.first])
-                    walls.push({ rand(), {cell.first, cell.second + 1} });
-            }
-        }
-
-        setStart(0, 0);
-        setEnd(width - 1, height - 1);
-        cout << "Лабиринт с гарантированным путем сгенерирован" << endl;
-        printMetrics("Генерация лабиринта с путем", start_time);
-    }
 };
 
 void showMenu() {
     cout << "\n=== Меню управления лабиринтом ===" << endl;
     cout << "1. Загрузить лабиринт из файла" << endl;
     cout << "2. Сгенерировать случайный лабиринт" << endl;
-    cout << "3. Сгенерировать лабиринт с гарантированным путем" << endl;
-    cout << "4. Установить стартовую точку" << endl;
-    cout << "5. Установить конечную точку" << endl;
-    cout << "6. Редактировать стену" << endl;
-    cout << "7. Выполнить волновой алгоритм" << endl;
-    cout << "8. Найти и показать путь" << endl;
-    cout << "9. Сохранить лабиринт в файл" << endl;
-    cout << "10. Показать лабиринт" << endl;
+    cout << "3. Установить стартовую точку" << endl;
+    cout << "4. Установить конечную точку" << endl;
+    cout << "5. Редактировать стену" << endl;
+    cout << "6. Выполнить волновой алгоритм" << endl;
+    cout << "7. Найти и показать путь" << endl;
+    cout << "8. Сохранить лабиринт в файл" << endl;
+    cout << "9. Показать лабиринт" << endl;
     cout << "0. Выход" << endl;
     cout << "Выберите действие: ";
 }
@@ -612,41 +541,32 @@ int main() {
             maze.generateRandom(x, y);
             break;
         case 3:
-            cout << "Введите ширину и высоту лабиринта: ";
-            cin >> x >> y;
-            if (x <= 0 || y <= 0) {
-                cout << "Размеры должны быть положительными!" << endl;
-                break;
-            }
-            maze.generateRandomWithPath(x, y);
-            break;
-        case 4:
             cout << "Введите координаты (x y) для старта: ";
             cin >> x >> y;
             maze.setStart(x, y);
             break;
-        case 5:
+        case 4:
             cout << "Введите координаты (x y) для финиша: ";
             cin >> x >> y;
             maze.setEnd(x, y);
             break;
-        case 6:
+        case 5:
             cout << "Введите координаты (x y), направление (N/S/W/E) и действие (0-удалить, 1-добавить): ";
             cin >> x >> y >> dir >> wallAction;
             maze.editWall(x, y, dir, wallAction == 1);
             break;
-        case 7:
+        case 6:
             maze.waveAlgorithm();
             break;
-        case 8:
+        case 7:
             maze.findPath();
             break;
-        case 9:
+        case 8:
             cout << "Введите имя файла для сохранения: ";
             cin >> filename;
             maze.saveToFile(filename);
             break;
-        case 10:
+        case 9:
             maze.printMaze();
             break;
         case 0:
